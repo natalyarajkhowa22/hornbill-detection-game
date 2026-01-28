@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hornbill Research Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      canvas {
+        image-rendering: auto;
+        cursor: crosshair;
+      }
+      .glass {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.38);
+      }
+      .kbd {
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        padding: 0.12rem 0.4rem;
+        border-radius: 0.45rem;
+        background: rgba(0, 0, 0, 0.25);
+        font-size: 0.78rem;
+      }
+      .pulse {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-black overflow-hidden">
+    <canvas id="game" class="absolute inset-0"></canvas>
+
+    <!-- HUD -->
+    <div
+      class="absolute top-4 left-4 p-4 rounded-2xl glass text-white w-[320px] z-10"
+    >
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <div class="text-xs uppercase tracking-widest text-white/70">
+            Hornbill Field Survey
+          </div>
+          <div class="text-[13px] text-white/60 mt-1">
+            <span class="kbd">WASD</span> Move
+            <span class="kbd">F</span> Observe
+            <span class="kbd">Shift</span> Sprint
+          </div>
+        </div>
+        <button
+          id="btnSettings"
+          class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition text-sm"
+        >
+          Settings
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div class="p-3 rounded-xl bg-white/5 border border-white/10">
+          <div class="text-xs text-white/70">Range</div>
+          <div id="hudRange" class="text-base font-semibold">—</div>
+        </div>
+        <div class="p-3 rounded-xl bg-white/5 border border-white/10">
+          <div class="text-xs text-white/70">Habitat</div>
+          <div id="hudHabitat" class="text-base font-semibold">—</div>
+        </div>
+
+        <div
+          class="p-3 rounded-xl bg-white/5 border border-white/10 col-span-2"
+        >
+          <div class="text-xs text-white/70">GPS</div>
+          <div id="hudGPS" class="text-[12px] font-mono">—</div>
+        </div>
+
+        <div
+          class="p-3 rounded-xl bg-white/5 border border-white/10 col-span-2"
+        >
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-white/70">Observations</div>
+            <div id="hudObs" class="text-lg font-semibold">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT UI -->
+    <div class="absolute top-4 right-4 space-y-3 z-10">
+      <div class="glass rounded-2xl p-3 text-white w-[220px]">
+        <div class="text-xs text-white/60 uppercase tracking-widest">
+          Compass
+        </div>
+        <canvas
+          id="compassCanvas"
+          width="200"
+          height="200"
+          class="mt-2 rounded-xl border border-white/10"
+        ></canvas>
+        <div
+          id="headingLabel"
+          class="text-xs text-white/60 font-mono mt-2 text-center"
+        >
+          —
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-3 text-white w-[220px]">
+        <div class="text-xs text-white/60 uppercase tracking-widest">
+          Mini Map
+        </div>
+        <canvas
+          id="minimap"
+          width="200"
+          height="200"
+          class="mt-2 rounded-xl border border-white/10"
+        ></canvas>
+        <div class="text-[11px] text-white/60 mt-2 text-center">
+          Bonda: jungle • Khanapara: edge + residential
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="interactPrompt"
+      class="hidden absolute bottom-10 left-1/2 -translate-x-1/2 glass rounded-2xl px-6 py-3 text-white z-10 pulse"
+    >
+      <div class="text-sm">
+        <span class="font-semibold">Hornbill detected</span>
+        <span class="text-white/70">— Press</span> <span class="kbd">F</span>
+        <span class="text-white/70">to observe</span>
+      </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="hidden absolute inset-0 z-40">
+      <div class="absolute inset-0 bg-black/60"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="glass rounded-2xl p-5 text-white w-full max-w-xl">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="text-lg font-semibold">Settings</div>
+              <div class="text-xs text-white/60 mt-1">
+                Day = bright, Night = dark with flashlight.
+              </div>
+            </div>
+            <button
+              id="btnSettingsClose"
+              class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition text-sm"
+            >
+              Close
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <div class="text-xs uppercase tracking-widest text-white/60">
+                Day/Night
+              </div>
+              <div class="mt-3 flex gap-2">
+                <button
+                  id="btnDay"
+                  class="flex-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition text-sm"
+                >
+                  Day (Bright)
+                </button>
+                <button
+                  id="btnNight"
+                  class="flex-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition text-sm"
+                >
+                  Night (Dark)
+                </button>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <div class="text-xs uppercase tracking-widest text-white/60">
+                Flashlight
+              </div>
+              <div class="mt-3 text-xs text-white/70">
+                Intensity: <span id="flashLabel">100%</span>
+              </div>
+              <input
+                id="flashSlider"
+                type="range"
+                min="0"
+                max="200"
+                value="100"
+                class="w-full mt-2 accent-emerald-300"
+              />
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <div class="text-xs uppercase tracking-widest text-white/60">
+                Research
+              </div>
+
+              <div class="mt-2 text-sm">
+                Level: <span id="hudLevel" class="font-semibold">1</span> / 10
+              </div>
+
+              <div class="mt-2 text-sm">
+                Mission: <span id="missionText" class="font-semibold">—</span>
+              </div>
+
+              <div id="missionSub" class="text-xs text-white/60 mt-1">—</div>
+
+              <div class="mt-2 text-xs text-white/70">
+                Progress: <span id="levelProgress">0 / 0</span>
+              </div>
+
+              <div class="mt-3 text-sm">
+                Points: <span id="hudPts" class="font-semibold">0</span>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10">
+              <div class="text-xs uppercase tracking-widest text-white/60">
+                Stamina
+              </div>
+              <div class="mt-3 flex items-center justify-between">
+                <div class="text-xs text-white/70">Sprint stamina</div>
+                <div id="hudStamLabel" class="text-xs text-white/60">100%</div>
+              </div>
+              <div class="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  id="hudStamina"
+                  class="h-2 rounded-full bg-emerald-300 w-[100%]"
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 flex items-center justify-between">
+            <div class="text-xs text-white/60">
+              Press <span class="kbd">ESC</span> to close.
+            </div>
+            <button
+              id="btnReport"
+              class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition text-sm"
+            >
+              Generate Thesis Report
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEVEL COMPLETE MODAL -->
+    <div id="levelModal" class="hidden absolute inset-0 z-50">
+      <div class="absolute inset-0 bg-black/60"></div>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <div class="glass text-white p-8 rounded-2xl text-center w-[420px]">
+          <div class="text-2xl font-bold mb-3">Level Complete 🎉</div>
+          <div id="levelText" class="text-sm text-white/80"></div>
+          <button
+            id="nextLevelBtn"
+            class="mt-5 px-4 py-2 bg-white/10 rounded-xl"
+          >
+            Next Level
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORT MODAL -->
+    <div id="reportModal" class="hidden absolute inset-0 z-50">
+      <div class="absolute inset-0 bg-black/60"></div>
+      <div class="absolute inset-0 p-4 md:p-10 overflow-auto">
+        <div
+          class="bg-white text-gray-900 max-w-5xl mx-auto rounded-2xl shadow-2xl overflow-hidden"
+          style="font-family: Georgia, 'Times New Roman', serif"
+        >
+          <div class="px-6 md:px-10 py-6 border-b bg-white">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h1 class="text-2xl md:text-3xl font-bold">
+                  Thesis Field Report (Final)
+                </h1>
+                <p class="mt-1 text-sm text-gray-600">
+                  Habitat preference and fruiting tree associations of Oriental
+                  Pied Hornbill (Anthracoceros albirostris).
+                </p>
+              </div>
+              <button
+                id="btnReportClose"
+                class="px-3 py-2 rounded-xl border border-gray-300 hover:bg-gray-50 transition text-sm font-sans"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div class="px-6 md:px-10 py-8 space-y-8">
+            <section>
+              <h2 class="text-xl font-bold">Abstract</h2>
+              <p id="repAbstract" class="mt-2 text-[15px] leading-7"></p>
+            </section>
+            <section>
+              <h2 class="text-xl font-bold">Results</h2>
+              <div class="overflow-x-auto mt-3">
+                <table class="w-full text-sm border border-gray-300">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Metric
+                      </th>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Value
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="repMetrics"></tbody>
+                </table>
+              </div>
+
+              <h3 class="text-lg font-bold mt-7">Observation Log</h3>
+              <div class="overflow-x-auto mt-3">
+                <table class="w-full text-sm border border-gray-300">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="border border-gray-300 p-2 text-left">#</th>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Range
+                      </th>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Habitat
+                      </th>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Confidence
+                      </th>
+                      <th class="border border-gray-300 p-2 text-left">GPS</th>
+                      <th class="border border-gray-300 p-2 text-left">Tree</th>
+                      <th class="border border-gray-300 p-2 text-left">
+                        Timestamp
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="repTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="pb-6">
+              <h2 class="text-xl font-bold">Conclusion</h2>
+              <p
+                id="repConclusion"
+                class="mt-2 text-[15px] leading-7 font-semibold"
+              ></p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        // =========================
+        // HELPERS
+        // =========================
+        const WORLD = { w: 5000, h: 5000 };
+
+        const MAP = {
+          minX: 250,
+          minY: 250,
+          maxX: 4750,
+          maxY: 4750,
+        };
+
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const rand = (a, b) => Math.random() * (b - a) + a;
+        const lerp = (a, b, t) => a + (b - a) * t;
+
+        // =========================
+        // SVG → IMG
+        // =========================
+        function svgToImage(svg) {
+          const img = new Image();
+          img.src =
+            "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+          return img;
+        }
+
+        const ASSET = {
+          hornbill: svgToImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0f172a"/>
+            <stop offset="1" stop-color="#111827"/>
+          </linearGradient>
+        </defs>
+        <path d="M16 54c10-22 31-32 53-26 6 2 11 5 14 10-9 2-16 7-20 13-7 9-20 14-33 14-6 0-11-1-14-2z" fill="url(#g)"/>
+        <path d="M46 34c10-8 26-9 38 2-13 2-19 10-25 18-4 6-14 11-22 12 9-4 17-11 19-19 1-5-3-10-10-13z" fill="#1f2937" opacity="0.9"/>
+        <circle cx="60" cy="40" r="3" fill="#e5e7eb"/>
+        <circle cx="60" cy="40" r="1.2" fill="#111827"/>
+        <path d="M70 44c8 2 14 7 16 13-10-1-18-5-22-10" fill="#f59e0b"/>
+        <path d="M22 56c-2 9 6 15 15 16-6-4-9-9-8-14" fill="#0b1220" opacity="0.9"/>
+      </svg>
+    `),
+
+          researcher: svgToImage(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <!-- Head -->
+    <circle cx="64" cy="36" r="14" fill="#f4a582"/>
+    
+    <!-- Safari/Explorer hat -->
+    <ellipse cx="64" cy="24" rx="18" ry="4" fill="#8b7355"/>
+    <path d="M46 24c0-6 8-10 18-10s18 4 18 10c0 4-4 8-8 10h-20c-4-2-8-6-8-10z" fill="#a0826d"/>
+    <circle cx="64" cy="24" r="12" fill="#8b7355"/>
+    <ellipse cx="64" cy="20" rx="10" ry="8" fill="#a0826d"/>
+    
+    <!-- Sunglasses -->
+    <rect x="52" y="36" width="10" height="6" rx="3" fill="#1e293b" opacity="0.8"/>
+    <rect x="66" y="36" width="10" height="6" rx="3" fill="#1e293b" opacity="0.8"/>
+    <line x1="62" y1="39" x2="66" y2="39" stroke="#1e293b" stroke-width="1.5"/>
+    
+    <!-- Vest/utility jacket -->
+    <path d="M42 110c0-10 4-20 8-28l4-12c2-6 6-10 10-10s8 4 10 10l4 12c4 8 8 18 8 28" fill="#4a5d3f"/>
+    
+    <!-- Vest pockets -->
+    <rect x="46" y="68" width="12" height="10" rx="1" fill="#3d4d34" opacity="0.8"/>
+    <rect x="70" y="68" width="12" height="10" rx="1" fill="#3d4d34" opacity="0.8"/>
+    <circle cx="52" cy="71" r="1" fill="#94a3b8"/>
+    <circle cx="76" cy="71" r="1" fill="#94a3b8"/>
+    
+    <!-- Backpack straps -->
+    <path d="M50 60c-2 0-4 2-4 6v20" stroke="#5c4033" stroke-width="4" fill="none"/>
+    <path d="M78 60c2 0 4 2 4 6v20" stroke="#5c4033" stroke-width="4" fill="none"/>
+    
+    <!-- Backpack (visible behind) -->
+    <ellipse cx="64" cy="65" rx="16" ry="18" fill="#704a3a"/>
+    <rect x="56" y="70" width="16" height="8" rx="2" fill="#8b6345"/>
+    <line x1="64" y1="70" x2="64" y2="78" stroke="#5c4033" stroke-width="1"/>
+    
+    <!-- Cargo shorts -->
+    <rect x="48" y="106" width="14" height="14" fill="#7c6f5d"/>
+    <rect x="66" y="106" width="14" height="14" fill="#7c6f5d"/>
+    
+    <!-- Cargo pockets -->
+    <rect x="50" y="110" width="10" height="6" rx="0.5" fill="#6b5f4d"/>
+    <rect x="68" y="110" width="10" height="6" rx="0.5" fill="#6b5f4d"/>
+    
+    <!-- Hiking boots -->
+    <ellipse cx="55" cy="122" rx="9" ry="5" fill="#4a3428"/>
+    <ellipse cx="73" cy="122" rx="9" ry="5" fill="#4a3428"/>
+    <rect x="49" y="118" width="12" height="6" rx="1" fill="#5c4033"/>
+    <rect x="67" y="118" width="12" height="6" rx="1" fill="#5c4033"/>
+    <line x1="51" y1="120" x2="59" y2="120" stroke="#3d2a1f" stroke-width="0.5"/>
+    <line x1="69" y1="120" x2="77" y2="120" stroke="#3d2a1f" stroke-width="0.5"/>
+    
+    <!-- Binoculars -->
+    <g transform="translate(68, 82)">
+      <rect x="0" y="0" width="18" height="12" rx="2" fill="#2d3748"/>
+      <circle cx="5" cy="6" r="4" fill="#1a202c"/>
+      <circle cx="13" cy="6" r="4" fill="#1a202c"/>
+      <circle cx="5" cy="6" r="3" fill="#4299e1" opacity="0.3"/>
+      <circle cx="13" cy="6" r="3" fill="#4299e1" opacity="0.3"/>
+      <rect x="7" y="4" width="4" height="4" fill="#374151"/>
+    </g>
+    
+    <!-- Water bottle in side pocket -->
+    <ellipse cx="38" cy="88" rx="3" ry="8" fill="#60a5fa"/>
+    <ellipse cx="38" cy="82" rx="2" ry="2" fill="#3b82f6"/>
+    
+    <!-- Field notebook in hand -->
+    <rect x="28" y="90" width="10" height="14" rx="1" fill="#d97706"/>
+    <rect x="29" y="92" width="8" height="10" fill="#fef3c7"/>
+    <line x1="30" y1="95" x2="36" y2="95" stroke="#92400e" stroke-width="0.5"/>
+    <line x1="30" y1="98" x2="35" y2="98" stroke="#92400e" stroke-width="0.5"/>
+  </svg>
+`),
+
+          treeFicus: svgToImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+        <path d="M60 120V72h8v48" fill="#4b2e16"/>
+        <path d="M64 74c-18 0-34-10-34-24 0-10 8-18 20-20 2-10 12-18 25-18 12 0 22 7 25 18 12 2 20 10 20 20 0 14-16 24-34 24" fill="#0b3b2e"/>
+        <circle cx="44" cy="48" r="6" fill="#10b981" opacity="0.5"/>
+        <circle cx="82" cy="44" r="7" fill="#10b981" opacity="0.45"/>
+      </svg>
+    `),
+
+          treeMusa: svgToImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+        <path d="M60 120V66h8v54" fill="#3b2a1a"/>
+        <path d="M64 70c-10 0-16-20-8-38 5 13 9 17 18 19-3 12-6 19-10 19z" fill="#0ea5a4"/>
+        <path d="M64 68c10 0 16-20 8-38-5 13-9 17-18 19 3 12 6 19 10 19z" fill="#22c55e"/>
+        <path d="M66 50c10-10 26-12 36-2-12 2-22 8-30 16" fill="#16a34a" opacity="0.7"/>
+      </svg>
+    `),
+
+          rock: svgToImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+        <path d="M18 60c2-16 14-30 30-32 18-2 32 10 32 26 0 14-10 24-28 24H32C22 78 16 70 18 60z"
+          fill="#334155"/>
+        <path d="M30 56c4-10 10-16 18-18" stroke="#94a3b8" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+      </svg>
+    `),
+
+          // ✅ simple hut/house asset for Khanapara residential edge
+          hut: svgToImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+        <path d="M18 46L48 22l30 24" fill="#7c2d12"/>
+        <path d="M24 46h48v32H24z" fill="#9a3412"/>
+        <rect x="40" y="56" width="16" height="22" rx="2" fill="#0f172a"/>
+        <rect x="28" y="54" width="10" height="10" rx="2" fill="#94a3b8"/>
+        <rect x="58" y="54" width="10" height="10" rx="2" fill="#94a3b8"/>
+      </svg>
+    `),
+        };
+
+        // =========================
+        // ORGANIC BOUNDARIES
+        // =========================
+        const interiorBoundary = {
+          baseY: WORLD.h * 0.45,
+          amp1: 420,
+          amp2: 240,
+          amp3: 140,
+          freq1: (2 * Math.PI) / 1700,
+          freq2: (2 * Math.PI) / 850,
+          freq3: (2 * Math.PI) / 320,
+          phase1: 0.8,
+          phase2: 1.7,
+          phase3: 0.2,
+        };
+        function interiorY(x) {
+          const y =
+            interiorBoundary.baseY +
+            Math.sin(x * interiorBoundary.freq1 + interiorBoundary.phase1) *
+              interiorBoundary.amp1 +
+            Math.sin(x * interiorBoundary.freq2 + interiorBoundary.phase2) *
+              interiorBoundary.amp2 +
+            Math.sin(x * interiorBoundary.freq3 + interiorBoundary.phase3) *
+              interiorBoundary.amp3;
+          return clamp(y, 650, WORLD.h - 650);
+        }
+        function habitatAt(x, y) {
+          return y > interiorY(x) ? "Interior" : "Edge";
+        }
+
+        // uneven range split
+        const rangeBoundary = {
+          baseX: WORLD.w * 0.52,
+          amp1: 260,
+          amp2: 130,
+          amp3: 70,
+          freq1: (2 * Math.PI) / 1500,
+          freq2: (2 * Math.PI) / 760,
+          freq3: (2 * Math.PI) / 320,
+          phase1: 0.5,
+          phase2: 1.1,
+          phase3: 2.3,
+        };
+        function splitX(y) {
+          const x =
+            rangeBoundary.baseX +
+            Math.sin(y * rangeBoundary.freq1 + rangeBoundary.phase1) *
+              rangeBoundary.amp1 +
+            Math.sin(y * rangeBoundary.freq2 + rangeBoundary.phase2) *
+              rangeBoundary.amp2 +
+            Math.sin(y * rangeBoundary.freq3 + rangeBoundary.phase3) *
+              rangeBoundary.amp3;
+          return clamp(x, 600, WORLD.w - 600);
+        }
+        function rangeAt(x, y) {
+          return x < splitX(y) ? "Bonda Range" : "Khanapara Range";
+        }
+
+        // =========================
+        // DAY/NIGHT (day = BRIGHT)
+        // =========================
+        const state = {
+          timeMode: "NIGHT", // default keep current as night
+          flashlight: 1.0,
+        };
+
+        // =========================
+        // CANVAS
+        // =========================
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        let vw = 0,
+          vh = 0;
+        function resize() {
+          vw = canvas.width = innerWidth;
+          vh = canvas.height = innerHeight;
+        }
+        addEventListener("resize", resize);
+        resize();
+
+        // =========================
+        // PLAYER + CAMERA
+        // =========================
+        const player = {
+          x: 900,
+          y: 2800,
+          vx: 0,
+          vy: 0,
+          speed: 330,
+          stamina: 1.0,
+          facing: 0,
+        };
+        const camera = { x: 0, y: 0, smoothing: 0.08, bobT: 0 };
+        function toScreen(wx, wy) {
+          return { x: wx - camera.x, y: wy - camera.y };
+        }
+        function depthScale(screenY) {
+          const t = clamp(screenY / vh, 0, 1);
+          return lerp(0.8, 1.35, t);
+        }
+        function gpsFromWorld(x, y) {
+          const latBase = 26.12,
+            lonBase = 91.79;
+          return {
+            lat: latBase + (y / WORLD.h) * 0.18,
+            lon: lonBase + (x / WORLD.w) * 0.25,
+          };
+        }
+
+        // =========================
+        // INPUT
+        // =========================
+        const keys = new Set();
+        let mouse = { x: vw / 2, y: vh / 2 };
+        addEventListener("mousemove", (e) => {
+          mouse.x = e.clientX;
+          mouse.y = e.clientY;
+        });
+        addEventListener("keydown", (e) => {
+          if (
+            ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(
+              e.key
+            )
+          )
+            e.preventDefault();
+          keys.add(e.key.toLowerCase());
+        });
+        addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+
+        // =========================
+        // ENTITIES
+        // =========================
+        const trees = [],
+          hornbills = [],
+          rocks = [],
+          huts = [],
+          roads = [],
+          particles = [],
+          observations = [];
+        const TREE_SPECIES = [
+          { key: "Ficus racemosa", sprite: "treeFicus" },
+          { key: "Ficus hispida", sprite: "treeFicus" },
+          { key: "Musa balbisiana", sprite: "treeMusa" },
+        ];
+
+        /* ================= LEVEL + POINTS SYSTEM ================= */
+
+        let points = 0;
+        let level = 1;
+        let levelCompleted = false;
+
+        const hudPts = document.getElementById("hudPts");
+
+        const LEVELS = [
+          {
+            goal: 5,
+            desc: "Record 5 hornbills anywhere",
+            progress: () => observations.length,
+          },
+          {
+            goal: 6,
+            desc: "Record 6 EDGE detections",
+            progress: () =>
+              observations.filter((o) => o.habitat === "Edge").length,
+          },
+          {
+            goal: 4,
+            desc: "Record 4 INTERIOR detections",
+            progress: () =>
+              observations.filter((o) => o.habitat === "Interior").length,
+          },
+          {
+            goal: 6,
+            desc: "Record 6 in Bonda Range",
+            progress: () =>
+              observations.filter((o) => o.range === "Bonda Range").length,
+          },
+          {
+            goal: 6,
+            desc: "Record 6 in Khanapara Range",
+            progress: () =>
+              observations.filter((o) => o.range === "Khanapara Range").length,
+          },
+          {
+            goal: 3,
+            desc: "Detect all 3 fruit tree species",
+            progress: () => new Set(observations.map((o) => o.tree)).size,
+          },
+          {
+            goal: 10,
+            desc: "Total 10 detections",
+            progress: () => observations.length,
+          },
+          {
+            goal: 8,
+            desc: "8 EDGE detections",
+            progress: () =>
+              observations.filter((o) => o.habitat === "Edge").length,
+          },
+          {
+            goal: 12,
+            desc: "12 total detections",
+            progress: () => observations.length,
+          },
+          {
+            goal: 15,
+            desc: "Final survey — 15 detections",
+            progress: () => observations.length,
+          },
+        ];
+
+        function updateLevelUI() {
+          const L = LEVELS[level - 1];
+          document.getElementById("hudLevel").textContent = level;
+          document.getElementById(
+            "levelProgress"
+          ).textContent = `${L.progress()} / ${L.goal}`;
+        }
+
+        function renderMission() {
+          const L = LEVELS[level - 1];
+          const p = L.progress();
+          const done = p >= L.goal;
+          document.getElementById(
+            "missionText"
+          ).textContent = `Level ${level}: ${
+            done ? "✅ Completed" : `${p}/${L.goal}`
+          }`;
+          document.getElementById("missionSub").textContent = L.desc;
+        }
+
+        function checkLevelProgress() {
+          if (levelCompleted) return;
+          const L = LEVELS[level - 1];
+          if (L.progress() >= L.goal) {
+            levelCompleted = true;
+            showLevelModal();
+          }
+        }
+
+        function showLevelModal() {
+          const L = LEVELS[level - 1];
+          const bonus = 150 + level * 25;
+          points += bonus;
+          hudPts.textContent = points;
+
+          document.getElementById(
+            "levelText"
+          ).textContent = `Level ${level} Complete!\n${L.desc}\n+${bonus} Research Points`;
+
+          document.getElementById("levelModal").classList.remove("hidden");
+        }
+
+        document.getElementById("nextLevelBtn").onclick = () => {
+          level++;
+          levelCompleted = false;
+
+          if (level > LEVELS.length) {
+            alert("🎓 Survey Complete! All levels finished.");
+            level = LEVELS.length;
+            return;
+          }
+
+          observations.length = 0;
+
+          updateLevelUI();
+          renderMission();
+
+          document.getElementById("levelModal").classList.add("hidden");
+        };
+
+        // spawn road segments in Khanapara
+        function spawnResidential() {
+          // Roads: few long curves on the right side
+          for (let i = 0; i < 5; i++) {
+            const y = rand(MAP.minY + 200, MAP.maxY - 200);
+            const points = [];
+            for (let t = 0; t < 9; t++) {
+              const yy = y + (t - 4) * 120;
+              const xx = splitX(yy) + rand(220, 700) + Math.sin(t) * 120;
+              points.push({
+                x: clamp(xx, MAP.minX, MAP.maxX),
+                y: clamp(yy, MAP.minY, MAP.maxY),
+              });
+            }
+            roads.push(points);
+          }
+
+          // huts near roads
+          for (let i = 0; i < 65; i++) {
+            const wy = rand(MAP.minY + 120, MAP.maxY - 120);
+            const wx = splitX(wy) + rand(250, 900);
+            huts.push({
+              x: clamp(wx, MAP.minX, MAP.maxX),
+              y: wy,
+              s: rand(0.7, 1.15),
+            });
+          }
+        }
+
+        function spawnWorld() {
+          // rocks everywhere
+          for (let i = 0; i < 220; i++) {
+            rocks.push({
+              x: rand(MAP.minX, MAP.maxX),
+              y: rand(MAP.minY, MAP.maxY),
+              s: rand(0.6, 1.2),
+            });
+          }
+
+          // trees: denser on Bonda (left)
+          const count = 360;
+          for (let i = 0; i < count; i++) {
+            const x = rand(MAP.minX, MAP.maxX);
+            const y = rand(MAP.minY, MAP.maxY);
+
+            const hab = habitatAt(x, y);
+            const inBonda = x < splitX(y);
+
+            const base = hab === "Edge" ? 1.0 : 0.45;
+            const rangeBias = inBonda ? 1.0 : 0.55; // ✅ fewer trees in Khanapara residential feel
+
+            if (Math.random() < base * rangeBias) {
+              const sp =
+                TREE_SPECIES[Math.floor(Math.random() * TREE_SPECIES.length)];
+              trees.push({
+                x,
+                y,
+                species: sp.key,
+                sprite: sp.sprite,
+                canopy: rand(60, 130),
+              });
+            }
+          }
+
+          spawnResidential();
+        }
+
+        function pickWeightedTreeNearby(x, y, radius = 1200) {
+          let list = [];
+          for (const t of trees) {
+            const d = Math.hypot(t.x - x, t.y - y);
+            if (d < radius) list.push({ t, w: 1 / (1 + (d * d) / 26000) });
+          }
+          if (!list.length) return null;
+          const sum = list.reduce((s, a) => s + a.w, 0);
+          let r = Math.random() * sum;
+          for (const c of list) {
+            r -= c.w;
+            if (r <= 0) return c.t;
+          }
+          return list[list.length - 1].t;
+        }
+
+        const WEIGHT = {
+          range: { bonda: 1.55, khanapara: 1.0 },
+          habitat: { edge: 3.25, interior: 1.0 },
+        };
+
+        function spawnHornbills() {
+          const count = 56;
+          for (let i = 0; i < count; i++) {
+            let x, y;
+            for (let tries = 0; tries < 18; tries++) {
+              x = rand(MAP.minX, MAP.maxX);
+              y = rand(MAP.minY, MAP.maxY);
+
+              const range = x < splitX(y) ? "bonda" : "khanapara";
+              const hab = habitatAt(x, y) === "Edge" ? "edge" : "interior";
+              const w = WEIGHT.range[range] * WEIGHT.habitat[hab];
+              const accept = Math.min(0.95, 0.15 * w);
+              if (Math.random() < accept) break;
+            }
+            const tree =
+              pickWeightedTreeNearby(x, y, 1400) ||
+              trees[Math.floor(Math.random() * trees.length)];
+            hornbills.push({
+              id: `HB-${String(i + 1).padStart(3, "0")}`,
+              x,
+              y,
+              flapT: rand(0, 10),
+              state: "RESTING",
+              stateTimer: rand(1.5, 4.5),
+              speed: rand(105, 175),
+              target: { x: tree.x + rand(-90, 90), y: tree.y + rand(-90, 90) },
+              associatedTree: tree,
+              labelTimer: 0,
+            });
+          }
+        }
+
+        spawnWorld();
+        spawnHornbills();
+
+        // =========================
+        // HUD refs
+        // =========================
+        const hudRange = document.getElementById("hudRange");
+        const hudHabitat = document.getElementById("hudHabitat");
+        const hudGPS = document.getElementById("hudGPS");
+        const hudObs = document.getElementById("hudObs");
+        const prompt = document.getElementById("interactPrompt");
+
+        // =========================
+        // Interact/observe
+        // =========================
+        function nearestHornbill(dist = 95) {
+          let best = null,
+            bd = Infinity;
+          for (const hb of hornbills) {
+            const d = Math.hypot(hb.x - player.x, hb.y - player.y);
+            if (d < dist && d < bd) {
+              best = hb;
+              bd = d;
+            }
+          }
+          return best;
+        }
+        function confidenceScore(habitat) {
+          const base = habitat === "Edge" ? rand(0.78, 0.98) : rand(0.55, 0.86);
+          return clamp(base, 0, 1);
+        }
+        function observe() {
+          const hb = nearestHornbill(95);
+          if (!hb) return;
+
+          const range = rangeAt(player.x, player.y);
+          const habitat = habitatAt(player.x, player.y);
+          const gps = gpsFromWorld(player.x, player.y);
+          const conf = confidenceScore(habitat);
+
+          points +=
+            20 +
+            (habitat === "Edge" ? 10 : 18) +
+            (range === "Bonda Range" ? 6 : 10) +
+            Math.round(conf * 10);
+
+          observations.push({
+            ts: Date.now(),
+            stamp: new Date().toLocaleString(),
+            range,
+            habitat,
+            conf,
+            lat: gps.lat,
+            lon: gps.lon,
+            tree: hb.associatedTree?.species || "Unknown",
+            hornbillId: hb.id,
+          });
+          hb.labelTimer = 2.2;
+
+          for (let i = 0; i < 18; i++) {
+            particles.push({
+              x: player.x + rand(-20, 20),
+              y: player.y + rand(-20, 20),
+              vx: rand(-30, 30),
+              vy: rand(-60, -10),
+              life: rand(0.4, 0.8),
+            });
+          }
+
+          hudObs.textContent = observations.length;
+          document.getElementById("hudPts").textContent = points;
+
+          points += 25;
+          hudPts.textContent = points;
+
+          updateLevelUI();
+          renderMission();
+          checkLevelProgress();
+        }
+        addEventListener("keydown", (e) => {
+          if (e.key.toLowerCase() === "f") {
+            observe();
+          }
+        });
+
+        // =========================
+        // Hornbill AI
+        // =========================
+        function setState(hb, st, d) {
+          hb.state = st;
+          hb.stateTimer = d;
+        }
+        function updateHornbill(hb, dt) {
+          hb.stateTimer -= dt;
+          hb.labelTimer = Math.max(0, hb.labelTimer - dt);
+          hb.flapT += dt;
+
+          if (hb.state === "RESTING") {
+            if (hb.stateTimer <= 0) {
+              const targetTree =
+                Math.random() < 0.8
+                  ? hb.associatedTree
+                  : pickWeightedTreeNearby(hb.x, hb.y, 1700) ||
+                    hb.associatedTree;
+
+              hb.associatedTree = targetTree || hb.associatedTree;
+              hb.target = {
+                x: clamp(
+                  hb.associatedTree.x + rand(-120, 120),
+                  MAP.minX,
+                  MAP.maxX
+                ),
+                y: clamp(
+                  hb.associatedTree.y + rand(-120, 120),
+                  MAP.minY,
+                  MAP.maxY
+                ),
+              };
+              setState(hb, "FLYING", rand(2.2, 5.5));
+            }
+          } else if (hb.state === "FLYING") {
+            const dx = hb.target.x - hb.x,
+              dy = hb.target.y - hb.y;
+            const d = Math.hypot(dx, dy);
+            if (d > 2) {
+              hb.x += (dx / d) * hb.speed * dt;
+              hb.y += (dy / d) * hb.speed * dt;
+            }
+            if (d < 18 || hb.stateTimer <= 0)
+              setState(hb, "FEEDING", rand(2.0, 4.2));
+          } else if (hb.state === "FEEDING") {
+            if (hb.stateTimer <= 0) setState(hb, "RESTING", rand(1.3, 3.8));
+          }
+        }
+
+        // =========================
+        // Movement w/ stamina + map limiting
+        // =========================
+        function updatePlayer(dt) {
+          let ax = 0,
+            ay = 0;
+
+          // Movement input
+          if (keys.has("w") || keys.has("arrowup")) ay -= 1;
+          if (keys.has("s") || keys.has("arrowdown")) ay += 1;
+          if (keys.has("a") || keys.has("arrowleft")) ax -= 1;
+          if (keys.has("d") || keys.has("arrowright")) ax += 1;
+
+          // Normalize direction
+          const mag = Math.hypot(ax, ay);
+          if (mag > 0) {
+            ax /= mag;
+            ay /= mag;
+          }
+
+          // Sprint logic
+          const isMoving = mag > 0;
+          const sprint = keys.has("shift") && player.stamina > 0.06 && isMoving;
+
+          const baseSpeed = player.speed;
+          const speed = sprint ? baseSpeed * 1.45 : baseSpeed;
+
+          // Stamina drain / regen
+          if (sprint) {
+            player.stamina = clamp(player.stamina - dt * 0.22, 0, 1);
+          } else {
+            player.stamina = clamp(player.stamina + dt * 0.12, 0, 1);
+          }
+
+          // Target velocity
+          const targetVx = ax * speed;
+          const targetVy = ay * speed;
+
+          // Smooth acceleration
+          player.vx = lerp(player.vx, targetVx, 0.1);
+          player.vy = lerp(player.vy, targetVy, 0.1);
+
+          // Friction when idle
+          if (!isMoving) {
+            player.vx *= 0.82;
+            player.vy *= 0.82;
+          }
+
+          // ✅ MOVE FIRST
+          player.x += player.vx * dt;
+          player.y += player.vy * dt;
+
+          // ✅ THEN clamp position (no velocity cancelling!)
+          player.x = clamp(player.x, MAP.minX, MAP.maxX);
+          player.y = clamp(player.y, MAP.minY, MAP.maxY);
+
+          // Player facing (toward mouse)
+          const px = vw / 2;
+          const py = vh * 0.7;
+          player.facing = Math.atan2(mouse.y - py, mouse.x - px);
+        }
+
+        function updateCamera(dt) {
+          camera.bobT += dt;
+
+          // Player anchor (player is drawn at lower part of screen)
+          const anchorX = player.x - vw / 2;
+          const anchorY = player.y - vh * 0.7;
+
+          camera.x += (anchorX - camera.x) * camera.smoothing;
+          camera.y += (anchorY - camera.y) * camera.smoothing;
+
+          // ✅ Camera can show areas beyond map edges (for edge visibility)
+          // Only prevent camera from going so far that map completely leaves screen
+          const maxCamX = MAP.maxX - vw * 0.3;
+          const minCamX = MAP.minX - vw * 0.7;
+          const maxCamY = MAP.maxY - vh * 0.3;
+          const minCamY = MAP.minY - vh * 0.7;
+
+          camera.x = clamp(camera.x, minCamX, maxCamX);
+          camera.y = clamp(camera.y, minCamY, maxCamY);
+        }
+
+        // =========================
+        // Procedural ground
+        // =========================
+        const tile = document.createElement("canvas");
+        tile.width = tile.height = 512;
+        const gtx = tile.getContext("2d");
+
+        (function makeTile() {
+          gtx.fillStyle = "#041d18";
+          gtx.fillRect(0, 0, 512, 512);
+          for (let i = 0; i < 2800; i++) {
+            const x = rand(0, 512),
+              y = rand(0, 512),
+              r = rand(1, 5);
+            gtx.fillStyle = `rgba(60,120,90,${rand(0.03, 0.12)})`;
+            gtx.beginPath();
+            gtx.arc(x, y, r, 0, Math.PI * 2);
+            gtx.fill();
+          }
+          for (let i = 0; i < 620; i++) {
+            const x = rand(0, 512),
+              y = rand(0, 512);
+            gtx.save();
+            gtx.translate(x, y);
+            gtx.rotate(rand(0, Math.PI * 2));
+            gtx.globalAlpha = rand(0.08, 0.18);
+            gtx.fillStyle = "#0b3b2e";
+            gtx.fillRect(-rand(6, 14), -1, rand(10, 24), 2);
+            gtx.restore();
+          }
+        })();
+
+        function drawGround() {
+          // Khanapara tint (residential)
+          const inKhanapara = player.x > splitX(player.y);
+          const pattern = ctx.createPattern(tile, "repeat");
+
+          ctx.save();
+          ctx.translate(-(camera.x % 512), -(camera.y % 512));
+          ctx.fillStyle = pattern;
+          ctx.fillRect(-512, -512, vw + 1024, vh + 1024);
+          ctx.restore();
+
+          // subtle residential overlay on right side
+          ctx.save();
+          ctx.globalAlpha = 0.08;
+          ctx.fillStyle = "#0f172a";
+          // screen-space split approximation: use player region. for feel, not perfect.
+          if (inKhanapara) {
+            ctx.fillRect(0, 0, vw, vh);
+          }
+          ctx.restore();
+        }
+
+        // =========================
+        // Draw residential: roads + huts
+        // =========================
+        function drawRoads() {
+          ctx.save();
+          ctx.globalAlpha = 0.35;
+          ctx.strokeStyle = "#94a3b8";
+          ctx.lineWidth = 18;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+
+          for (const poly of roads) {
+            ctx.beginPath();
+            for (let i = 0; i < poly.length; i++) {
+              const p = poly[i];
+              const s = toScreen(p.x, p.y);
+              if (i === 0) ctx.moveTo(s.x, s.y);
+              else ctx.lineTo(s.x, s.y);
+            }
+            ctx.stroke();
+          }
+
+          // center line
+          ctx.globalAlpha = 0.2;
+          ctx.strokeStyle = "#e2e8f0";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([12, 10]);
+          for (const poly of roads) {
+            ctx.beginPath();
+            for (let i = 0; i < poly.length; i++) {
+              const p = poly[i];
+              const s = toScreen(p.x, p.y);
+              if (i === 0) ctx.moveTo(s.x, s.y);
+              else ctx.lineTo(s.x, s.y);
+            }
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+
+        function drawHuts() {
+          for (const h of huts) {
+            if (
+              h.x < camera.x - 200 ||
+              h.x > camera.x + vw + 200 ||
+              h.y < camera.y - 200 ||
+              h.y > camera.y + vh + 200
+            )
+              continue;
+            const s = toScreen(h.x, h.y);
+            const sc = depthScale(s.y) * h.s;
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.drawImage(
+              ASSET.hut,
+              s.x - 22 * sc,
+              s.y - 40 * sc,
+              52 * sc,
+              52 * sc
+            );
+            ctx.restore();
+          }
+        }
+
+        // =========================
+        // Boundaries
+        // =========================
+        function drawInteriorBoundary() {
+          ctx.save();
+          ctx.setLineDash([10, 10]);
+          ctx.strokeStyle = "rgba(255,70,70,0.85)";
+          ctx.lineWidth = 2.4;
+
+          ctx.beginPath();
+          const step = 26;
+          const startX = Math.floor(camera.x / step) * step;
+          for (let wx = startX; wx <= camera.x + vw + step; wx += step) {
+            const wy = interiorY(wx);
+            const s = toScreen(wx, wy);
+            if (wx === startX) ctx.moveTo(s.x, s.y);
+            else ctx.lineTo(s.x, s.y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function drawRangeBoundary() {
+          ctx.save();
+          ctx.setLineDash([6, 10]);
+          ctx.strokeStyle = "rgba(255,255,255,0.10)";
+          ctx.lineWidth = 4;
+
+          ctx.beginPath();
+          const step = 26;
+          const startY = Math.floor(camera.y / step) * step;
+          for (let wy = startY; wy <= camera.y + vh + step; wy += step) {
+            const wx = splitX(wy);
+            const s = toScreen(wx, wy);
+            if (wy === startY) ctx.moveTo(s.x, s.y);
+            else ctx.lineTo(s.x, s.y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // =========================
+        // Draw entities
+        // =========================
+        function drawEntities() {
+          const pack = [];
+          for (const r of rocks) {
+            if (
+              r.x < camera.x - 240 ||
+              r.x > camera.x + vw + 240 ||
+              r.y < camera.y - 240 ||
+              r.y > camera.y + vh + 240
+            )
+              continue;
+            pack.push({ type: "rock", y: r.y, ref: r });
+          }
+          for (const t of trees) {
+            if (
+              t.x < camera.x - 240 ||
+              t.x > camera.x + vw + 240 ||
+              t.y < camera.y - 240 ||
+              t.y > camera.y + vh + 240
+            )
+              continue;
+            pack.push({ type: "tree", y: t.y, ref: t });
+          }
+          for (const hb of hornbills) {
+            if (
+              hb.x < camera.x - 200 ||
+              hb.x > camera.x + vw + 200 ||
+              hb.y < camera.y - 200 ||
+              hb.y > camera.y + vh + 200
+            )
+              continue;
+            pack.push({ type: "hb", y: hb.y, ref: hb });
+          }
+          pack.sort((a, b) => a.y - b.y);
+
+          for (const e of pack) {
+            if (e.type === "rock") {
+              const r = e.ref;
+              const s = toScreen(r.x, r.y);
+              const sc = depthScale(s.y) * r.s;
+              ctx.save();
+              ctx.globalAlpha = 0.9;
+              ctx.drawImage(
+                ASSET.rock,
+                s.x - 22 * sc,
+                s.y - 18 * sc,
+                48 * sc,
+                48 * sc
+              );
+              ctx.restore();
+            }
+            if (e.type === "tree") {
+              const t = e.ref;
+              const s = toScreen(t.x, t.y);
+              const sc = depthScale(s.y);
+
+              ctx.save();
+              ctx.globalAlpha = 0.28;
+              ctx.fillStyle = "rgba(0,0,0,0.70)";
+              ctx.beginPath();
+              ctx.ellipse(
+                s.x,
+                s.y + 30 * sc,
+                t.canopy * 0.34 * sc,
+                t.canopy * 0.18 * sc,
+                0,
+                0,
+                Math.PI * 2
+              );
+              ctx.fill();
+              ctx.restore();
+
+              const img = ASSET[t.sprite] || ASSET.treeFicus;
+              ctx.save();
+              ctx.globalAlpha = 0.98;
+              ctx.drawImage(
+                img,
+                s.x - 42 * sc,
+                s.y - 74 * sc,
+                92 * sc,
+                92 * sc
+              );
+              ctx.restore();
+            }
+            if (e.type === "hb") {
+              const hb = e.ref;
+              const s = toScreen(hb.x, hb.y);
+              const sc = depthScale(s.y);
+              const flap = 1 + Math.sin(hb.flapT * 7.5) * 0.06;
+
+              ctx.save();
+              ctx.globalAlpha = hb.state === "FLYING" ? 0.1 : 0.18;
+              ctx.fillStyle = "rgba(0,0,0,0.75)";
+              ctx.beginPath();
+              ctx.ellipse(
+                s.x,
+                s.y + 22 * sc,
+                12 * sc,
+                6 * sc,
+                0,
+                0,
+                Math.PI * 2
+              );
+              ctx.fill();
+              ctx.restore();
+
+              ctx.save();
+              ctx.translate(s.x, s.y);
+              ctx.scale(sc * flap, sc * (2 - flap));
+              ctx.drawImage(ASSET.hornbill, -22, -22, 48, 48);
+              ctx.restore();
+            }
+          }
+        }
+
+        function drawPlayer() {
+          const screenX = vw / 2,
+            screenY = vh * 0.7;
+          const sc = depthScale(screenY);
+
+          ctx.save();
+          ctx.globalAlpha = 0.24;
+          ctx.fillStyle = "rgba(0,0,0,0.85)";
+          ctx.beginPath();
+          ctx.ellipse(
+            screenX,
+            screenY + 20 * sc,
+            16 * sc,
+            8 * sc,
+            0,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+          ctx.restore();
+
+          ctx.save();
+          ctx.drawImage(
+            ASSET.researcher,
+            screenX - 32 * sc,
+            screenY - 58 * sc,
+            78 * sc,
+            78 * sc
+          );
+          ctx.restore();
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(255,255,255,0.30)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(mouse.x, mouse.y, 10, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function drawParticles(dt) {
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life -= dt;
+            if (p.life <= 0) {
+              particles.splice(i, 1);
+              continue;
+            }
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.vx *= 0.92;
+            p.vy += 60 * dt;
+
+            const s = toScreen(p.x, p.y);
+            ctx.save();
+            ctx.globalAlpha = clamp(p.life / 0.8, 0, 1) * 0.6;
+            ctx.fillStyle = "rgba(150,255,220,0.9)";
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        // =========================
+        // LIGHTING (day bright / night dark)
+        // =========================
+        function drawLighting() {
+          const cx = vw / 2,
+            cy = vh * 0.7;
+          const isNight = state.timeMode === "NIGHT";
+
+          ctx.save();
+
+          if (!isNight) {
+            // 🌤 WARMER DAY LIGHTING
+            ctx.fillStyle = "rgba(255, 245, 200, 0.12)"; // warm sunlight
+            ctx.fillRect(0, 0, vw, vh);
+
+            // golden hour glow
+            const sun = ctx.createRadialGradient(
+              vw * 0.7,
+              vh * 0.15,
+              20,
+              vw * 0.7,
+              vh * 0.15,
+              Math.max(vw, vh)
+            );
+            sun.addColorStop(0, "rgba(255, 200, 120, 0.20)");
+            sun.addColorStop(0.4, "rgba(255, 230, 180, 0.10)");
+            sun.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = sun;
+            ctx.fillRect(0, 0, vw, vh);
+
+            // forest canopy dappling
+            const shade = ctx.createLinearGradient(0, 0, 0, vh);
+            shade.addColorStop(0, "rgba(40,60,40,0.08)");
+            shade.addColorStop(1, "rgba(20,40,25,0.05)");
+            ctx.fillStyle = shade;
+            ctx.fillRect(0, 0, vw, vh);
+          } else {
+            // 🌌 NIGHT BASE
+            ctx.fillStyle = "rgba(15, 20, 35, 0.60)";
+            ctx.fillRect(0, 0, vw, vh);
+
+            // cool moon tint
+            ctx.fillStyle = "rgba(100, 150, 200, 0.08)";
+            ctx.fillRect(0, 0, vw, vh);
+
+            // 🔦 FLASHLIGHT
+            const intensity = state.flashlight;
+            const coneLen = 700 * (0.8 + intensity * 0.7);
+            const coneW = 280 * (0.7 + intensity * 0.5);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(player.facing);
+
+            const g = ctx.createRadialGradient(
+              0,
+              0,
+              30,
+              coneLen * 0.6,
+              0,
+              coneLen
+            );
+            g.addColorStop(0, `rgba(255,240,200,${0.28 + intensity * 0.22})`);
+            g.addColorStop(0.5, `rgba(255,250,220,${0.16 + intensity * 0.12})`);
+            g.addColorStop(1, "rgba(0,0,0,0)");
+
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(coneLen, coneW);
+            ctx.lineTo(coneLen, -coneW);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+
+          ctx.restore();
+        }
+        function drawFog() {
+          const hab = habitatAt(player.x, player.y);
+          const isNight = state.timeMode === "NIGHT";
+
+          // ✅ much less fog in daytime
+          const base =
+            (hab === "Interior" ? 0.1 : 0.05) * (isNight ? 1.12 : 0.55);
+
+          ctx.save();
+          for (let layer = 0; layer < 3; layer++) {
+            ctx.globalAlpha = base * (1 - layer * 0.25);
+            const drift = (performance.now() / 1000) * (10 + layer * 8);
+            for (let i = 0; i < 10; i++) {
+              const x =
+                (((Math.sin(i * 999 + layer) * 0.5 + 0.5) * vw +
+                  drift * (layer + 1)) %
+                  (vw + 220)) -
+                110;
+              const y =
+                (((Math.cos(i * 777 + layer) * 0.5 + 0.5) * vh +
+                  drift * (layer + 1) * 0.6) %
+                  (vh + 220)) -
+                110;
+              ctx.fillStyle = "rgba(180,255,230,0.07)";
+              ctx.beginPath();
+              ctx.arc(x, y, rand(90, 160), 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+        }
+
+        // =========================
+        // HUD update
+        // =========================
+        function updateHUD() {
+          hudRange.textContent = rangeAt(player.x, player.y);
+          hudHabitat.textContent = habitatAt(player.x, player.y);
+          const gps = gpsFromWorld(player.x, player.y);
+          hudGPS.textContent = `${gps.lat.toFixed(5)}, ${gps.lon.toFixed(
+            5
+          )} | w(${Math.round(player.x)},${Math.round(player.y)})`;
+
+          const hb = nearestHornbill(95);
+          prompt.classList.toggle("hidden", !hb);
+
+          const s = Math.round(player.stamina * 100);
+          document.getElementById("hudStamina").style.width = `${s}%`;
+          document.getElementById("hudStamLabel").textContent = `${s}%`;
+        }
+
+        // =========================
+        // COMPASS
+        // =========================
+        const compCanvas = document.getElementById("compassCanvas");
+        const comp = compCanvas.getContext("2d");
+        const headingLabel = document.getElementById("headingLabel");
+
+        function drawCompass() {
+          comp.clearRect(0, 0, compCanvas.width, compCanvas.height);
+          const cx = 100,
+            cy = 100,
+            r = 85;
+
+          comp.save();
+          comp.strokeStyle = "rgba(255,255,255,0.25)";
+          comp.lineWidth = 4;
+          comp.beginPath();
+          comp.arc(cx, cy, r, 0, Math.PI * 2);
+          comp.stroke();
+          comp.restore();
+
+          comp.save();
+          comp.translate(cx, cy);
+          for (let i = 0; i < 360; i += 15) {
+            const a = (i * Math.PI) / 180;
+            const len = i % 90 === 0 ? 14 : i % 45 === 0 ? 10 : 6;
+            comp.strokeStyle =
+              i % 90 === 0 ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)";
+            comp.lineWidth = i % 90 === 0 ? 3 : 2;
+            comp.beginPath();
+            comp.moveTo(Math.cos(a) * (r - len), Math.sin(a) * (r - len));
+            comp.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            comp.stroke();
+          }
+          comp.restore();
+
+          comp.save();
+          comp.fillStyle = "rgba(255,255,255,0.85)";
+          comp.font = "600 14px system-ui";
+          comp.textAlign = "center";
+          comp.textBaseline = "middle";
+          comp.fillText("N", cx, cy - r + 18);
+          comp.fillText("S", cx, cy + r - 18);
+          comp.fillText("E", cx + r - 18, cy);
+          comp.fillText("W", cx - r + 18, cy);
+          comp.restore();
+
+          const heading = player.facing;
+          comp.save();
+          comp.translate(cx, cy);
+          comp.rotate(heading);
+
+          comp.fillStyle = "rgba(255,90,90,0.95)";
+          comp.beginPath();
+          comp.moveTo(0, -70);
+          comp.lineTo(10, 0);
+          comp.lineTo(-10, 0);
+          comp.closePath();
+          comp.fill();
+
+          comp.fillStyle = "rgba(255,255,255,0.75)";
+          comp.beginPath();
+          comp.moveTo(0, 70);
+          comp.lineTo(10, 0);
+          comp.lineTo(-10, 0);
+          comp.closePath();
+          comp.fill();
+
+          comp.fillStyle = "rgba(0,0,0,0.55)";
+          comp.beginPath();
+          comp.arc(0, 0, 10, 0, Math.PI * 2);
+          comp.fill();
+          comp.strokeStyle = "rgba(255,255,255,0.25)";
+          comp.lineWidth = 2;
+          comp.stroke();
+
+          comp.restore();
+
+          let deg = ((heading * 180) / Math.PI + 360) % 360;
+          headingLabel.textContent = `Heading: ${deg.toFixed(0)}°`;
+        }
+
+        // =========================
+        // MINIMAP
+        // =========================
+        const mm = document.getElementById("minimap");
+        const mmx = mm.getContext("2d");
+
+        function drawMinimap() {
+          mmx.clearRect(0, 0, mm.width, mm.height);
+
+          // base
+          mmx.fillStyle = "#05211b";
+          mmx.fillRect(0, 0, mm.width, mm.height);
+
+          // residential tint for khanapara
+          mmx.globalAlpha = 0.18;
+          mmx.fillStyle = "#0f172a";
+          mmx.fillRect(mm.width * 0.55, 0, mm.width * 0.45, mm.height);
+          mmx.globalAlpha = 1;
+
+          // trees density
+          mmx.globalAlpha = 0.55;
+          for (let i = 0; i < trees.length; i += 3) {
+            const t = trees[i];
+            const x = ((t.x - MAP.minX) / (MAP.maxX - MAP.minX)) * mm.width;
+            const y = ((t.y - MAP.minY) / (MAP.maxY - MAP.minY)) * mm.height;
+            mmx.fillStyle = "rgba(34,197,94,0.35)";
+            mmx.beginPath();
+            mmx.arc(x, y, 2.1, 0, Math.PI * 2);
+            mmx.fill();
+          }
+          mmx.globalAlpha = 1;
+
+          // boundary interior
+          mmx.strokeStyle = "rgba(255,80,80,0.95)";
+          mmx.setLineDash([6, 6]);
+          mmx.lineWidth = 2;
+          mmx.beginPath();
+          for (let x = 0; x <= mm.width; x += 4) {
+            const wx = MAP.minX + (x / mm.width) * (MAP.maxX - MAP.minX);
+            const wy = interiorY(wx);
+            const y = ((wy - MAP.minY) / (MAP.maxY - MAP.minY)) * mm.height;
+            if (x === 0) mmx.moveTo(x, y);
+            else mmx.lineTo(x, y);
+          }
+          mmx.stroke();
+
+          // range split
+          mmx.strokeStyle = "rgba(255,255,255,0.35)";
+          mmx.setLineDash([5, 8]);
+          mmx.lineWidth = 2;
+          mmx.beginPath();
+          for (let y = 0; y <= mm.height; y += 4) {
+            const wy = MAP.minY + (y / mm.height) * (MAP.maxY - MAP.minY);
+            const wx = splitX(wy);
+            const x = ((wx - MAP.minX) / (MAP.maxX - MAP.minX)) * mm.width;
+            if (y === 0) mmx.moveTo(x, y);
+            else mmx.lineTo(x, y);
+          }
+          mmx.stroke();
+          mmx.setLineDash([]);
+
+          // player
+          const px = ((player.x - MAP.minX) / (MAP.maxX - MAP.minX)) * mm.width;
+          const py =
+            ((player.y - MAP.minY) / (MAP.maxY - MAP.minY)) * mm.height;
+          mmx.fillStyle = "rgba(150,255,220,0.95)";
+          mmx.beginPath();
+          mmx.arc(px, py, 4, 0, Math.PI * 2);
+          mmx.fill();
+
+          // facing
+          mmx.strokeStyle = "rgba(150,255,220,0.65)";
+          mmx.beginPath();
+          mmx.moveTo(px, py);
+          mmx.lineTo(
+            px + Math.cos(player.facing) * 14,
+            py + Math.sin(player.facing) * 14
+          );
+          mmx.stroke();
+        }
+
+        // =========================
+        // SETTINGS WIRING
+        // =========================
+        const settingsModal = document.getElementById("settingsModal");
+        document
+          .getElementById("btnSettings")
+          .addEventListener("click", () =>
+            settingsModal.classList.remove("hidden")
+          );
+        document
+          .getElementById("btnSettingsClose")
+          .addEventListener("click", () =>
+            settingsModal.classList.add("hidden")
+          );
+        addEventListener("keydown", (e) => {
+          if (e.key === "Escape") settingsModal.classList.add("hidden");
+        });
+
+        document.getElementById("btnDay").addEventListener("click", () => {
+          state.timeMode = "DAY";
+        });
+        document.getElementById("btnNight").addEventListener("click", () => {
+          state.timeMode = "NIGHT";
+        });
+
+        const flashSlider = document.getElementById("flashSlider");
+        const flashLabel = document.getElementById("flashLabel");
+        flashSlider.addEventListener("input", () => {
+          state.flashlight = Number(flashSlider.value) / 100;
+          flashLabel.textContent = `${flashSlider.value}%`;
+        });
+
+        // =========================
+        // REPORT WIRING
+        // =========================
+        const reportModal = document.getElementById("reportModal");
+        document.getElementById("btnReport").addEventListener("click", () => {
+          buildReport();
+          reportModal.classList.remove("hidden");
+        });
+        document
+          .getElementById("btnReportClose")
+          .addEventListener("click", () => reportModal.classList.add("hidden"));
+        addEventListener("keydown", (e) => {
+          if (e.key === "Escape") reportModal.classList.add("hidden");
+        });
+
+        function countBy(arr, keyFn) {
+          const m = new Map();
+          for (const it of arr) {
+            const k = keyFn(it);
+            m.set(k, (m.get(k) || 0) + 1);
+          }
+          return m;
+        }
+        function pct(n, d) {
+          return d ? ((100 * n) / d).toFixed(1) + "%" : "0%";
+        }
+        function significanceLabel(edgePct) {
+          if (edgePct >= 70) return "Significant";
+          if (edgePct >= 55) return "Moderate";
+          return "Minor";
+        }
+
+        function buildReport() {
+          const repAbstract = document.getElementById("repAbstract");
+          const repMetrics = document.getElementById("repMetrics");
+          const repTable = document.getElementById("repTable");
+          const repConclusion = document.getElementById("repConclusion");
+
+          const n = observations.length;
+          if (!n) {
+            repAbstract.textContent =
+              "No observations recorded. Continue sampling.";
+            repMetrics.innerHTML = `<tr><td class="border border-gray-300 p-2">Total</td><td class="border border-gray-300 p-2">0</td></tr>`;
+            repTable.innerHTML = "";
+            repConclusion.textContent = "Insufficient data.";
+            return;
+          }
+
+          const byRange = countBy(observations, (o) => o.range);
+          const byHab = countBy(observations, (o) => o.habitat);
+          const byTree = countBy(observations, (o) => o.tree);
+
+          const bondaN = byRange.get("Bonda Range") || 0;
+          const khN = byRange.get("Khanapara Range") || 0;
+          const edgeN = byHab.get("Edge") || 0;
+          const intN = byHab.get("Interior") || 0;
+
+          const edgePct = (edgeN / n) * 100;
+          const edgePref = significanceLabel(edgePct);
+          const preferRange = bondaN >= khN ? "Bonda" : "Khanapara";
+
+          const topTree = [...byTree.entries()].sort((a, b) => b[1] - a[1])[0];
+          const meanConf = observations.reduce((s, o) => s + o.conf, 0) / n;
+
+          repAbstract.textContent = `A total of ${n} detections were recorded. Habitat preference indicates ${edgePref.toLowerCase()} selection for Edge habitat (edge detections = ${edgeN}/${n}). Overall mean confidence of detections was ${(
+            meanConf * 100
+          ).toFixed(1)}%.`;
+
+          repMetrics.innerHTML = `
+      <tr><td class="border border-gray-300 p-2">Total Observations</td><td class="border border-gray-300 p-2">${n}</td></tr>
+      <tr><td class="border border-gray-300 p-2">Bonda Range</td><td class="border border-gray-300 p-2">${bondaN} (${pct(
+            bondaN,
+            n
+          )})</td></tr>
+      <tr><td class="border border-gray-300 p-2">Khanapara Range</td><td class="border border-gray-300 p-2">${khN} (${pct(
+            khN,
+            n
+          )})</td></tr>
+      <tr><td class="border border-gray-300 p-2">Edge Habitat</td><td class="border border-gray-300 p-2">${edgeN} (${pct(
+            edgeN,
+            n
+          )})</td></tr>
+      <tr><td class="border border-gray-300 p-2">Interior Habitat</td><td class="border border-gray-300 p-2">${intN} (${pct(
+            intN,
+            n
+          )})</td></tr>
+      <tr><td class="border border-gray-300 p-2">Mean Confidence</td><td class="border border-gray-300 p-2">${(
+        meanConf * 100
+      ).toFixed(1)}%</td></tr>
+      <tr><td class="border border-gray-300 p-2">Top Tree Association</td><td class="border border-gray-300 p-2">${
+        topTree ? `${topTree[0]} (${topTree[1]})` : "—"
+      }</td></tr>
+    `;
+
+          repTable.innerHTML = observations
+            .slice()
+            .reverse()
+            .map(
+              (o, idx) => `
+      <tr>
+        <td class="border border-gray-300 p-2">${n - idx}</td>
+        <td class="border border-gray-300 p-2">${o.range}</td>
+        <td class="border border-gray-300 p-2">${o.habitat}</td>
+        <td class="border border-gray-300 p-2">${Math.round(o.conf * 100)}%</td>
+        <td class="border border-gray-300 p-2 font-mono">${o.lat.toFixed(
+          5
+        )}, ${o.lon.toFixed(5)}</td>
+        <td class="border border-gray-300 p-2"><em>${o.tree}</em></td>
+        <td class="border border-gray-300 p-2">${o.stamp}</td>
+      </tr>
+    `
+            )
+            .join("");
+
+          repConclusion.textContent = `Detections were higher in ${preferRange} Range and showed a ${edgePref} preference for Edge habitats (${edgeN}/${n} = ${edgePct.toFixed(
+            1
+          )}%).`;
+        }
+
+        // =========================
+        // Draw boundary walls (map limit)
+        // =========================
+        function drawMapLimits() {
+          // dark forest wall around edges
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.fillStyle = "#000";
+          // top
+          ctx.fillRect(0, 0, vw, MAP.minY - camera.y);
+          // bottom
+          ctx.fillRect(0, MAP.maxY - camera.y, vw, vh);
+          // left
+          ctx.fillRect(0, 0, MAP.minX - camera.x, vh);
+          // right
+          ctx.fillRect(MAP.maxX - camera.x, 0, vw, vh);
+          ctx.restore();
+        }
+
+        updateLevelUI();
+        renderMission();
+
+        // =========================
+        // LOOP
+        // =========================
+        let last = performance.now();
+        function loop(now) {
+          const dt = Math.min(0.033, (now - last) / 1000);
+          last = now;
+
+          updatePlayer(dt);
+          for (const hb of hornbills) updateHornbill(hb, dt);
+          updateCamera(dt);
+
+          updateHUD();
+          drawMinimap();
+          drawCompass();
+
+          // render
+          ctx.clearRect(0, 0, vw, vh);
+          drawGround();
+          drawRoads();
+          drawHuts();
+          drawRangeBoundary();
+          drawInteriorBoundary();
+          drawEntities();
+          drawParticles(dt);
+          drawPlayer();
+          drawLighting();
+          drawFog();
+          drawMapLimits();
+
+          requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+      })();
+    </script>
+  </body>
+</html>
